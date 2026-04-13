@@ -33,7 +33,7 @@ class handler(BaseHTTPRequestHandler):
         if not prompt:
             return self._json(400, {"error": "prompt is required"})
 
-        api_key = os.environ.get("https://integrate.api.nvidia.com/v1/chat/completions", "")
+        api_key = os.environ.get("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", "")
         if not api_key:
             return self._json(500, {"error": "NVIDIA_API_KEY environment variable is not set"})
 
