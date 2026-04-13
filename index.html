@@ -1,0 +1,557 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>VISIO — AI Image Prompt Generator</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@300;400;500&family=DM+Mono:wght@300;400&display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:      #060608;
+      --surface: #0e0e12;
+      --border:  #1e1e26;
+      --accent:  #c8ff00;
+      --accent2: #ff4757;
+      --text:    #eeeef2;
+      --muted:   #55556a;
+      --muted2:  #2a2a38;
+    }
+
+    html { scroll-behavior: smooth; }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'DM Sans', sans-serif;
+      font-weight: 300;
+      min-height: 100vh;
+      overflow-x: hidden;
+    }
+
+    /* ── Grain overlay ── */
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='300' height='300'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.75' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='300' height='300' filter='url(%23n)' opacity='1'/%3E%3C/svg%3E");
+      opacity: .032;
+      pointer-events: none;
+      z-index: 9999;
+    }
+
+    /* ── Layout ── */
+    .wrap { max-width: 860px; margin: 0 auto; padding: 0 28px; }
+
+    /* ── Header ── */
+    header {
+      padding: 48px 0 0;
+      animation: fadeDown .6s ease both;
+    }
+    .logo {
+      font-family: 'Bebas Neue', sans-serif;
+      font-size: clamp(52px, 10vw, 96px);
+      letter-spacing: .02em;
+      line-height: .9;
+      color: var(--text);
+    }
+    .logo span { color: var(--accent); }
+    .tagline {
+      margin-top: 12px;
+      font-size: 13px;
+      letter-spacing: .18em;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+
+    /* ── Divider ── */
+    .rule {
+      height: 1px;
+      background: var(--border);
+      margin: 36px 0;
+      animation: scaleX .7s .1s ease both;
+      transform-origin: left;
+    }
+
+    /* ── Badge ── */
+    .powered {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      border: 1px solid var(--border);
+      padding: 6px 14px;
+      font-size: 11px;
+      letter-spacing: .14em;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin-bottom: 36px;
+      animation: fadeUp .5s .2s ease both;
+    }
+    .powered .dot { width: 6px; height: 6px; background: var(--accent); border-radius: 50%; }
+
+    /* ── Controls ── */
+    .controls { animation: fadeUp .5s .25s ease both; }
+
+    .field-label {
+      font-size: 10px;
+      letter-spacing: .2em;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin-bottom: 8px;
+    }
+
+    textarea {
+      width: 100%;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      color: var(--text);
+      font-family: 'DM Sans', sans-serif;
+      font-size: 16px;
+      font-weight: 300;
+      padding: 18px 20px;
+      resize: none;
+      outline: none;
+      line-height: 1.6;
+      transition: border-color .2s;
+      border-radius: 2px;
+    }
+    textarea::placeholder { color: var(--muted); }
+    textarea:focus { border-color: var(--accent); }
+
+    /* ── Style / Mood row ── */
+    .selectors {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+      margin-top: 16px;
+    }
+
+    .select-wrap { position: relative; }
+    select {
+      width: 100%;
+      appearance: none;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      color: var(--text);
+      font-family: 'DM Sans', sans-serif;
+      font-size: 14px;
+      font-weight: 300;
+      padding: 13px 16px;
+      outline: none;
+      cursor: pointer;
+      border-radius: 2px;
+      transition: border-color .2s;
+    }
+    select:focus { border-color: var(--accent); }
+    .select-arrow {
+      position: absolute;
+      right: 14px; top: 50%;
+      transform: translateY(-50%);
+      color: var(--muted);
+      pointer-events: none;
+      font-size: 10px;
+    }
+
+    /* ── Generate button ── */
+    .btn-wrap { margin-top: 20px; }
+    button#gen {
+      background: var(--accent);
+      color: #000;
+      border: none;
+      font-family: 'Bebas Neue', sans-serif;
+      font-size: 22px;
+      letter-spacing: .08em;
+      padding: 16px 44px;
+      cursor: pointer;
+      transition: transform .15s, opacity .15s;
+      border-radius: 2px;
+    }
+    button#gen:hover { transform: translateY(-2px); }
+    button#gen:active { transform: translateY(0); opacity: .85; }
+    button#gen:disabled {
+      opacity: .4;
+      cursor: not-allowed;
+      transform: none;
+    }
+
+    /* ── Loader ── */
+    .loader {
+      display: none;
+      align-items: center;
+      gap: 12px;
+      margin-top: 32px;
+      font-size: 12px;
+      letter-spacing: .16em;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+    .loader.active { display: flex; }
+    .bars { display: flex; gap: 4px; align-items: flex-end; height: 20px; }
+    .bars span {
+      display: block;
+      width: 3px;
+      background: var(--accent);
+      border-radius: 2px;
+      animation: bounce 1s infinite ease-in-out;
+    }
+    .bars span:nth-child(1) { height: 8px;  animation-delay: 0s; }
+    .bars span:nth-child(2) { height: 16px; animation-delay: .15s; }
+    .bars span:nth-child(3) { height: 12px; animation-delay: .3s; }
+    .bars span:nth-child(4) { height: 20px; animation-delay: .1s; }
+    .bars span:nth-child(5) { height: 8px;  animation-delay: .25s; }
+
+    /* ── Result card ── */
+    #result-section {
+      margin-top: 48px;
+      opacity: 0;
+      transform: translateY(16px);
+      transition: opacity .4s ease, transform .4s ease;
+    }
+    #result-section.visible { opacity: 1; transform: translateY(0); }
+
+    .result-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 12px;
+    }
+    .result-title {
+      font-size: 10px;
+      letter-spacing: .2em;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+    .tag-row { display: flex; gap: 8px; }
+    .tag {
+      font-size: 10px;
+      letter-spacing: .12em;
+      text-transform: uppercase;
+      border: 1px solid var(--border);
+      padding: 4px 10px;
+      color: var(--muted);
+      border-radius: 2px;
+    }
+    .tag.accent { border-color: var(--accent); color: var(--accent); }
+
+    .result-box {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-left: 3px solid var(--accent);
+      padding: 24px 28px;
+      font-family: 'DM Mono', monospace;
+      font-size: 13.5px;
+      line-height: 1.8;
+      color: #ccccd8;
+      white-space: pre-wrap;
+      word-break: break-word;
+      border-radius: 2px;
+    }
+
+    .result-actions {
+      display: flex;
+      gap: 10px;
+      margin-top: 16px;
+    }
+    .btn-sm {
+      background: transparent;
+      border: 1px solid var(--border);
+      color: var(--muted);
+      font-family: 'DM Sans', sans-serif;
+      font-size: 12px;
+      letter-spacing: .12em;
+      text-transform: uppercase;
+      padding: 9px 20px;
+      cursor: pointer;
+      transition: border-color .2s, color .2s;
+      border-radius: 2px;
+    }
+    .btn-sm:hover { border-color: var(--accent); color: var(--accent); }
+    .btn-sm.copied { border-color: var(--accent); color: var(--accent); }
+
+    /* ── Error ── */
+    .error-box {
+      background: rgba(255,71,87,.08);
+      border: 1px solid rgba(255,71,87,.3);
+      color: #ff8090;
+      padding: 14px 20px;
+      font-size: 13px;
+      margin-top: 20px;
+      display: none;
+      border-radius: 2px;
+    }
+    .error-box.active { display: block; }
+
+    /* ── History ── */
+    #history-section { margin-top: 56px; animation: fadeUp .5s .4s ease both; }
+    .section-head {
+      font-size: 10px;
+      letter-spacing: .2em;
+      text-transform: uppercase;
+      color: var(--muted2);
+      margin-bottom: 20px;
+    }
+    .history-list { display: flex; flex-direction: column; gap: 12px; }
+    .h-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      padding: 16px 20px;
+      cursor: pointer;
+      transition: border-color .2s;
+      border-radius: 2px;
+    }
+    .h-card:hover { border-color: var(--muted); }
+    .h-meta { display: flex; gap: 8px; margin-bottom: 8px; }
+    .h-tag {
+      font-size: 10px;
+      letter-spacing: .1em;
+      text-transform: uppercase;
+      color: var(--muted);
+      border: 1px solid var(--muted2);
+      padding: 2px 8px;
+      border-radius: 2px;
+    }
+    .h-prompt {
+      font-size: 13px;
+      color: var(--muted);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    /* ── Footer ── */
+    footer {
+      margin-top: 80px;
+      padding: 32px 0 40px;
+      border-top: 1px solid var(--border);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 11px;
+      letter-spacing: .12em;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+
+    /* ── Animations ── */
+    @keyframes fadeDown  { from { opacity:0; transform:translateY(-12px) } to { opacity:1; transform:none } }
+    @keyframes fadeUp    { from { opacity:0; transform:translateY(12px)  } to { opacity:1; transform:none } }
+    @keyframes scaleX    { from { transform:scaleX(0) } to { transform:scaleX(1) } }
+    @keyframes bounce    { 0%,100% { transform:scaleY(.5) } 50% { transform:scaleY(1) } }
+
+    @media(max-width:540px) {
+      .selectors { grid-template-columns: 1fr; }
+      footer { flex-direction: column; gap: 8px; }
+    }
+  </style>
+</head>
+<body>
+
+<div class="wrap">
+
+  <!-- Header -->
+  <header>
+    <div class="logo">VIS<span>I</span>O</div>
+    <p class="tagline">AI Image Prompt Generator · Powered by NVIDIA</p>
+  </header>
+
+  <div class="rule"></div>
+
+  <div class="powered">
+    <span class="dot"></span>
+    google/gemma-4-31b-it &nbsp;·&nbsp; NVIDIA NIM
+  </div>
+
+  <!-- Controls -->
+  <div class="controls">
+    <div class="field-label">Your Concept or Idea</div>
+    <textarea id="prompt" rows="4"
+      placeholder="e.g. a lone astronaut on a forgotten planet, overgrown ruins, twin moons at dusk…"></textarea>
+
+    <div class="selectors">
+      <div class="select-wrap">
+        <div class="field-label">Art Style</div>
+        <select id="style">
+          <option>Photorealistic</option>
+          <option>Cinematic</option>
+          <option>Oil Painting</option>
+          <option>Watercolor</option>
+          <option>Concept Art</option>
+          <option>3D Render</option>
+          <option>Anime / Manga</option>
+          <option>Ink Sketch</option>
+          <option>Pixel Art</option>
+          <option>Surrealist</option>
+        </select>
+        <span class="select-arrow">▾</span>
+      </div>
+
+      <div class="select-wrap">
+        <div class="field-label">Mood</div>
+        <select id="mood">
+          <option>Cinematic</option>
+          <option>Dramatic</option>
+          <option>Serene</option>
+          <option>Mysterious</option>
+          <option>Joyful</option>
+          <option>Melancholic</option>
+          <option>Ethereal</option>
+          <option>Gritty</option>
+          <option>Romantic</option>
+          <option>Futuristic</option>
+          <option>Nostalgic</option>
+        </select>
+        <span class="select-arrow">▾</span>
+      </div>
+    </div>
+
+    <div class="btn-wrap">
+      <button id="gen" onclick="generate()">Generate Prompt</button>
+    </div>
+
+    <div class="loader" id="loader">
+      <div class="bars">
+        <span></span><span></span><span></span><span></span><span></span>
+      </div>
+      Thinking with Gemma…
+    </div>
+
+    <div class="error-box" id="err"></div>
+  </div>
+
+  <!-- Result -->
+  <div id="result-section">
+    <div class="result-header">
+      <span class="result-title">Generated Prompt</span>
+      <div class="tag-row">
+        <span class="tag" id="rtag-style"></span>
+        <span class="tag accent" id="rtag-mood"></span>
+      </div>
+    </div>
+    <div class="result-box" id="result-text"></div>
+    <div class="result-actions">
+      <button class="btn-sm" id="copy-btn" onclick="copyResult()">Copy Prompt</button>
+      <button class="btn-sm" onclick="generate()">Regenerate</button>
+    </div>
+  </div>
+
+  <!-- History -->
+  <div id="history-section" style="display:none">
+    <div class="section-head">Recent Generations</div>
+    <div class="history-list" id="history-list"></div>
+  </div>
+
+  <footer>
+    <span>VISIO · NVIDIA NIM</span>
+    <span>Gemma 4 · 31B</span>
+  </footer>
+
+</div>
+
+<script>
+  const history = [];
+
+  async function generate() {
+    const prompt = document.getElementById('prompt').value.trim();
+    if (!prompt) { shake('prompt'); return; }
+
+    const style = document.getElementById('style').value;
+    const mood  = document.getElementById('mood').value;
+    const btn   = document.getElementById('gen');
+    const loader = document.getElementById('loader');
+    const errBox = document.getElementById('err');
+    const resultSec = document.getElementById('result-section');
+
+    btn.disabled = true;
+    loader.classList.add('active');
+    errBox.classList.remove('active');
+    resultSec.classList.remove('visible');
+
+    try {
+      const res = await fetch('/api/generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prompt, style, mood }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Unknown error');
+
+      // Show result
+      document.getElementById('result-text').textContent = data.result;
+      document.getElementById('rtag-style').textContent  = style;
+      document.getElementById('rtag-mood').textContent   = mood;
+      document.getElementById('copy-btn').textContent    = 'Copy Prompt';
+      document.getElementById('copy-btn').classList.remove('copied');
+      resultSec.classList.add('visible');
+      resultSec.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+
+      // History
+      history.unshift({ prompt, style, mood, result: data.result });
+      if (history.length > 5) history.pop();
+      renderHistory();
+
+    } catch (e) {
+      errBox.textContent = '⚠ ' + e.message;
+      errBox.classList.add('active');
+    } finally {
+      btn.disabled = false;
+      loader.classList.remove('active');
+    }
+  }
+
+  function copyResult() {
+    const text = document.getElementById('result-text').textContent;
+    navigator.clipboard.writeText(text).then(() => {
+      const btn = document.getElementById('copy-btn');
+      btn.textContent = 'Copied!';
+      btn.classList.add('copied');
+      setTimeout(() => { btn.textContent = 'Copy Prompt'; btn.classList.remove('copied'); }, 2000);
+    });
+  }
+
+  function renderHistory() {
+    const sec  = document.getElementById('history-section');
+    const list = document.getElementById('history-list');
+    if (!history.length) { sec.style.display = 'none'; return; }
+    sec.style.display = 'block';
+    list.innerHTML = history.map((h, i) => `
+      <div class="h-card" onclick="loadHistory(${i})">
+        <div class="h-meta">
+          <span class="h-tag">${h.style}</span>
+          <span class="h-tag">${h.mood}</span>
+        </div>
+        <div class="h-prompt">${h.prompt}</div>
+      </div>`).join('');
+  }
+
+  function loadHistory(i) {
+    const h = history[i];
+    document.getElementById('prompt').value = h.prompt;
+    document.getElementById('style').value  = h.style;
+    document.getElementById('mood').value   = h.mood;
+    document.getElementById('result-text').textContent = h.result;
+    document.getElementById('rtag-style').textContent  = h.style;
+    document.getElementById('rtag-mood').textContent   = h.mood;
+    document.getElementById('result-section').classList.add('visible');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+
+  function shake(id) {
+    const el = document.getElementById(id);
+    el.style.animation = 'none';
+    el.offsetHeight;
+    el.style.borderColor = 'var(--accent2)';
+    setTimeout(() => el.style.borderColor = '', 600);
+  }
+
+  // Ctrl+Enter to generate
+  document.getElementById('prompt').addEventListener('keydown', e => {
+    if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') generate();
+  });
+</script>
+
+</body>
+</html>
