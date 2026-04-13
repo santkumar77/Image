@@ -12,31 +12,30 @@ Output ONLY the prompt (150-200 words). No preamble, no labels, no explanations.
 
 
 class handler(BaseHTTPRequestHandler):
+
     def do_OPTIONS(self):
         self.send_response(200)
-        self._send_cors_headers()
+        self._cors()
         self.end_headers()
 
     def do_POST(self):
         try:
             length = int(self.headers.get("Content-Length", 0))
-            body = json.loads(self.rfile.read(length))
-        except Exception:
-            self._error(400, "Invalid JSON body")
-            return
+            raw = self.rfile.read(length)
+            body = json.loads(raw)
+        except Exception as e:
+            return self._json(400, {"error": f"Invalid JSON body: {e}"})
 
         prompt = body.get("prompt", "").strip()
-        style = body.get("style", "Photorealistic")
-        mood = body.get("mood", "Cinematic")
+        style  = body.get("style", "Photorealistic")
+        mood   = body.get("mood", "Cinematic")
 
         if not prompt:
-            self._error(400, "prompt is required")
-            return
+            return self._json(400, {"error": "prompt is required"})
 
         api_key = os.environ.get("NVIDIA_API_KEY", "")
         if not api_key:
-            self._error(500, "NVIDIA_API_KEY not configured")
-            return
+            return self._json(500, {"error": "NVIDIA_API_KEY environment variable is not set"})
 
         user_msg = f"Concept: {prompt}\nArt style: {style}\nMood/atmosphere: {mood}"
 
@@ -44,7 +43,7 @@ class handler(BaseHTTPRequestHandler):
             "model": "google/gemma-4-31b-it",
             "messages": [
                 {"role": "system", "content": SYSTEM_PROMPT},
-                {"role": "user", "content": user_msg},
+                {"role": "user",   "content": user_msg},
             ],
             "max_tokens": 512,
             "temperature": 1.0,
@@ -57,8 +56,8 @@ class handler(BaseHTTPRequestHandler):
             data=payload,
             headers={
                 "Authorization": f"Bearer {api_key}",
-                "Content-Type": "application/json",
-                "Accept": "application/json",
+                "Content-Type":  "application/json",
+                "Accept":        "application/json",
             },
             method="POST",
         )
@@ -68,32 +67,27 @@ class handler(BaseHTTPRequestHandler):
                 data = json.loads(resp.read().decode("utf-8"))
         except urllib.error.HTTPError as e:
             detail = e.read().decode("utf-8")
-            self._error(e.code, f"NVIDIA API error: {detail}")
-            return
+            return self._json(e.code, {"error": f"NVIDIA API error: {detail}"})
         except Exception as e:
-            self._error(502, f"Upstream error: {str(e)}")
-            return
+            return self._json(502, {"error": f"Upstream error: {str(e)}"})
 
         result = data.get("choices", [{}])[0].get("message", {}).get("content", "")
-        usage = data.get("usage", {})
+        usage  = data.get("usage", {})
+        return self._json(200, {"result": result, "usage": usage})
 
-        self.send_response(200)
-        self._send_cors_headers()
-        self.send_header("Content-Type", "application/json")
-        self.end_headers()
-        self.wfile.write(json.dumps({"result": result, "usage": usage}).encode())
-
-    def _error(self, code, msg):
+    def _json(self, code, obj):
+        body = json.dumps(obj).encode("utf-8")
         self.send_response(code)
-        self._send_cors_headers()
-        self.send_header("Content-Type", "application/json")
+        self._cors()
+        self.send_header("Content-Type",   "application/json")
+        self.send_header("Content-Length", str(len(body)))
         self.end_headers()
-        self.wfile.write(json.dumps({"error": msg}).encode())
+        self.wfile.write(body)
 
-    def _send_cors_headers(self):
-        self.send_header("Access-Control-Allow-Origin", "*")
+    def _cors(self):
+        self.send_header("Access-Control-Allow-Origin",  "*")
         self.send_header("Access-Control-Allow-Methods", "POST, OPTIONS")
         self.send_header("Access-Control-Allow-Headers", "Content-Type")
 
-    def log_message(self, format, *args):
-        pass  # suppress default logging
+    def log_message(self, *args):
+        pass
